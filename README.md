@@ -81,6 +81,28 @@ are allowed; diagnoses of people are not.
 5. Perceived trust is a diagnostic, never an objective. Nothing here
    optimizes for the reader feeling reassured.
 
+## Wiring it to an LLM
+
+The prompt asks; the library enforces. `examples/system_prompt.md` is a
+paste-ready system prompt that makes a model emit the seven sections as
+JSON, and `examples/llm_integration.py` is the whole enforcement loop in
+about 30 lines:
+
+```python
+sections = json.loads(llm_response)   # model emits the seven keys
+result = compose(sections)            # library enforces the contract
+
+if result["ok"]:
+    show(result["render"])            # fixed-order, machine-checked
+else:
+    show(f"Full analysis refused: {result['refusals']}")   # disclosed fallback
+```
+
+A model can ignore instructions on a bad day. It cannot ignore compose().
+Inference language smuggled into OBSERVED refuses the whole render no
+matter how confident the prose sounded. Run `is_high_stakes()` on the
+incoming request first so chitchat stays chitchat.
+
 ## Install
 
 ```
