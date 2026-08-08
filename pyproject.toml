@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "trust-skeleton"
+version = "0.1.0"
+description = "A fixed-order epistemic contract for high-stakes AI reports: observed, inferred, options, unknowns, weather, who decides, receipt. Fail-closed."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Dave DePew" }]
+keywords = ["ai-honesty", "epistemics", "governance", "trust", "reporting"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries",
+]
+
+[project.urls]
+Homepage = "https://github.com/davedepew/trust-skeleton"
+Repository = "https://github.com/davedepew/trust-skeleton"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trust_skeleton"]
