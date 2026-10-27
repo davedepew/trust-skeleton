@@ -1,6 +1,6 @@
 # DDEI — Dave DePew Extended Intelligence
 
-DDEI is the name of the model family. Proposed model names below.
+DDEI is the name of the model family. Naming convention: models are `DDEI_`; engines are `DD_` (e.g. the existing DD_Code engines).
 
 Status: **Proposed names, pending comparison with existing DD_Code engines.**
 
@@ -8,17 +8,17 @@ Status: **Proposed names, pending comparison with existing DD_Code engines.**
 
 | Name | Purpose |
 |------|---------|
-| DD_Mind | Language, reasoning, and planning. |
+| DDEI_Mind | Language, reasoning, and planning. |
 
 ## To be developed from our engines and study libraries
 
 | Name | Purpose |
 |------|---------|
-| DD_Sight | Visual perception and interpretation. |
-| DD_Voice | Speech recognition and generation. |
-| DD_Concept | Learned abstractions and concept generation. |
-| DD_World | Predict environments and consequences of actions. |
-| DD_Physics | Model and predict physical behavior. |
-| DD_Bio | Model biological structures and processes. |
-| DD_Motion | Translate observations and goals into movement. |
-| DD_Embed | Represent information for search, matching, and retrieval. |
+| DDEI_Sight | Visual perception and interpretation. |
+| DDEI_Voice | Speech recognition and generation. |
+| DDEI_Concept | Learned abstractions and concept generation. |
+| DDEI_World | Predict environments and consequences of actions. |
+| DDEI_Physics | Model and predict physical behavior. |
+| DDEI_Bio | Model biological structures and processes. |
+| DDEI_Motion | Translate observations and goals into movement. |
+| DDEI_Embed | Represent information for search, matching, and retrieval. |
