@@ -1,4 +1,6 @@
-# Dave DePew Intelligence Models — Proposed Names
+# DDEI — Dave DePew Extended Intelligence
+
+DDEI is the name of the model family. Proposed model names below.
 
 Status: **Proposed names, pending comparison with existing DD_Code engines.**
 
