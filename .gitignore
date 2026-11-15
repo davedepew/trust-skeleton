@@ -7,3 +7,6 @@ build/
 .venv/
 .env
 .env.*
+
+# camera_guard output
+camera_guard_events/
