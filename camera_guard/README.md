@@ -38,6 +38,20 @@ from camera_guard import Config, Monitor
 Monitor(Config(source=0, on_event=lambda phase, ev: print(phase, ev.kind))).run()
 ```
 
+## Email alerts
+
+Set your SMTP details as environment variables (never put the password on the command line or in code), send a test, then run:
+
+```bash
+export CG_SMTP_HOST=smtp.gmail.com CG_SMTP_PORT=587
+export CG_SMTP_USER=you@gmail.com CG_SMTP_PASSWORD='your-app-password'   # Gmail/Outlook need an app password
+python -m camera_guard --email-to you@example.com --email-test          # sends one test email and exits
+python -m camera_guard --source 0 --email-to you@example.com            # alerts on person events
+python -m camera_guard --source 0 --email-to you@example.com --email-on person,motion --email-interval 300
+```
+
+Each alert includes the annotated snapshot. Port 587 uses STARTTLS and 465 uses implicit SSL, so credentials are never sent in clear text. Alerts are rate-limited per kind (`--email-interval`, default 60s) and sent on a background thread, so a slow mail server can't stall detection. Snapshots of your space travel through your mail provider; only send to addresses you trust. Delivery is verified only against a stub SMTP server in tests, so run `--email-test` against your real account first.
+
 ## Better person detection with YOLO (optional)
 
 Export a COCO-trained YOLOv8 or YOLO11 model to ONNX (`yolo export model=yolov8n.pt format=onnx`, needs the `ultralytics` package) and pass it with `--yolo-model`. Needs `onnxruntime`. Check the model's licence (Ultralytics models are AGPL-3.0) before redistributing. The pre/post-processing is unit-tested; **accuracy on a real model and real footage is untested here.**
