@@ -14,14 +14,44 @@ def main() -> None:
     p.add_argument("--no-people", action="store_true", help="motion only (faster, lower CPU)")
     p.add_argument("--yolo-model", help="path to a YOLOv8/YOLO11 .onnx model (better person detection; needs onnxruntime)")
     p.add_argument("--yolo-conf", type=float, default=0.4, help="YOLO confidence threshold")
+    p.add_argument("--email-to", help="comma-separated addresses to alert (SMTP settings come from CG_SMTP_* env vars)")
+    p.add_argument("--email-on", default="person", help="event kinds that trigger email: person, motion, or person,motion")
+    p.add_argument("--email-interval", type=float, default=60.0, help="min seconds between alerts of the same kind")
+    p.add_argument("--email-test", action="store_true", help="send one test email and exit")
     p.add_argument("--display", action="store_true", help="show a live window (needs opencv-python, not headless)")
     p.add_argument("--clear-seconds", type=float, default=5.0)
     a = p.parse_args()
+    alerter = None
+    if a.email_to or a.email_test:
+        from .alerts import EmailAlerter
+        if not a.email_to:
+            p.error("--email-test needs --email-to")
+        kinds = [k.strip() for k in a.email_on.split(",") if k.strip()]
+        if not set(kinds) <= {"person", "motion"}:
+            p.error("--email-on must be person, motion, or person,motion")
+        if a.no_people and "person" in kinds:
+            p.error("--email-on person needs person detection; drop --no-people or use --email-on motion")
+        try:
+            alerter = EmailAlerter.from_env([r.strip() for r in a.email_to.split(",") if r.strip()],
+                                            kinds=kinds, min_interval=a.email_interval)
+        except RuntimeError as e:
+            p.error(str(e))
+        if a.email_test:
+            try:
+                alerter.send_test()
+            except Exception as e:
+                raise SystemExit(f"test email failed: {type(e).__name__}: {e}")
+            print("test email sent")
+            alerter.close()
+            return
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     zone = [tuple(float(v) for v in pt.split(",")) for pt in a.zone.split(";")] if a.zone else None
     src = int(a.source) if a.source.isdigit() else a.source
     Monitor(Config(source=src, out_dir=Path(a.out), min_area=a.min_area, zone=zone,
-                   detect_people=not a.no_people, yolo_model=a.yolo_model, yolo_conf=a.yolo_conf, display=a.display, clear_seconds=a.clear_seconds)).run()
+                   detect_people=not a.no_people, yolo_model=a.yolo_model, yolo_conf=a.yolo_conf, display=a.display, clear_seconds=a.clear_seconds,
+                   on_event=alerter)).run()
+    if alerter:
+        alerter.close()
 
 
 main()

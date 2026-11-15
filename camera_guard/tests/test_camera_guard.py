@@ -129,3 +129,63 @@ def test_yolo_detector_end_to_end_with_stub_session():
     d = object.__new__(YoloPersonDetector)
     d.conf, d.iou, d.zone, d.sess, d.input_name, d.size = 0.4, 0.45, Zone(), Stub(), "images", 640
     assert d.detect(room()) == [(270, 140, 100, 200)]
+
+
+# ---- email alerts (stub SMTP; no network) ----
+from camera_guard.alerts import EmailAlerter
+from camera_guard.events import Event
+
+
+class StubSMTP:
+    sent = []
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def login(self, *a): pass
+    def send_message(self, msg): StubSMTP.sent.append(msg)
+
+
+def make_alerter(**kw):
+    StubSMTP.sent = []
+    clock = kw.pop("clock", lambda: 0.0)
+    return EmailAlerter("smtp.test", ["me@example.com"], "cam@example.com", smtp_factory=StubSMTP,
+                        clock=clock, **kw)
+
+
+def test_email_sent_with_snapshot_attachment(tmp_path):
+    snap = tmp_path / "x.jpg"; cv2.imwrite(str(snap), room())
+    a = make_alerter(); a("start", Event("person", 1000.0, peak_boxes=2, snapshot=str(snap))); a.close()
+    assert len(StubSMTP.sent) == 1
+    m = StubSMTP.sent[0]
+    assert "Person detected" in m["Subject"] and m["To"] == "me@example.com"
+    assert [p.get_filename() for p in m.iter_attachments()] == ["x.jpg"]
+
+
+def test_email_ignores_unselected_kinds_and_end_events():
+    a = make_alerter(); a("start", Event("motion", 1.0)); a("end", Event("person", 1.0, 2.0)); a.close()
+    assert StubSMTP.sent == []
+
+
+def test_email_rate_limited_per_kind():
+    t = [0.0]
+    a = make_alerter(min_interval=60, clock=lambda: t[0])
+    a("start", Event("person", 1.0)); t[0] = 30; a("start", Event("person", 2.0))   # suppressed
+    t[0] = 61; a("start", Event("person", 3.0)); a.close()
+    assert len(StubSMTP.sent) == 2
+
+
+def test_email_failure_does_not_kill_worker():
+    calls = []
+    class Boom(StubSMTP):
+        def send_message(self, msg):
+            calls.append(1)
+            if len(calls) == 1: raise OSError("smtp down")
+            super().send_message(msg)
+    StubSMTP.sent = []
+    a = EmailAlerter("h", ["me@example.com"], "c@example.com", smtp_factory=Boom, min_interval=0)
+    a("start", Event("person", 1.0)); a("start", Event("person", 2.0)); a.close()
+    assert len(calls) == 2 and len(StubSMTP.sent) == 1
+
+
+def test_from_env_requires_host_and_sender():
+    with pytest.raises(RuntimeError): EmailAlerter.from_env(["a@b.c"], env={})
+    with pytest.raises(RuntimeError): EmailAlerter.from_env(["a@b.c"], env={"CG_SMTP_HOST": "h"})
