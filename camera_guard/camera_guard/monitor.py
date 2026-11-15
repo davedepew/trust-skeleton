@@ -11,7 +11,7 @@ from typing import Callable, Iterator
 import cv2
 import numpy as np
 
-from .detectors import Detection, MotionDetector, PersonDetector, Zone
+from .detectors import Detection, MotionDetector, PersonDetector, YoloPersonDetector, Zone
 from .events import Event, EventTracker
 
 log = logging.getLogger("camera_guard")
@@ -29,6 +29,8 @@ class Config:
     snapshot_cooldown: float = 10.0       # seconds between snapshots of the same kind
     max_snapshots: int = 2000             # oldest are deleted beyond this (disk safety)
     detect_people: bool = True
+    yolo_model: str | None = None         # path to YOLOv8/YOLO11 .onnx; default is the built-in HOG detector
+    yolo_conf: float = 0.4
     reconnect_seconds: float = 5.0
     on_event: Callable[[str, Event], None] | None = None  # hook: ("start"|"end", event)
     display: bool = False
@@ -51,7 +53,10 @@ class Monitor:
         self.cfg = cfg
         zone = Zone(cfg.zone)
         self.motion = MotionDetector(min_area=cfg.min_area, zone=zone)
-        self.people = PersonDetector(zone=zone) if cfg.detect_people else None
+        self.people = None
+        if cfg.detect_people:
+            self.people = (YoloPersonDetector(cfg.yolo_model, conf=cfg.yolo_conf, zone=zone)
+                           if cfg.yolo_model else PersonDetector(zone=zone))
         self.tracker = EventTracker(cfg.clear_seconds, cfg.min_frames)
         self.snap_dir = cfg.out_dir / "snapshots"
         self.snap_dir.mkdir(parents=True, exist_ok=True)

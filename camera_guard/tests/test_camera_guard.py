@@ -88,3 +88,44 @@ def test_hook_failure_does_not_crash(tmp_path):
 def test_person_detector_runs_on_blank_frame():
     from camera_guard import PersonDetector
     assert PersonDetector().detect(room()) == []
+
+
+# ---- YOLO (tested without a model file: pure pre/post-processing + a stub session) ----
+from camera_guard.detectors import letterbox, decode_yolo_person, YoloPersonDetector
+
+
+def fake_yolo_output(boxes, n=8400, classes=80):
+    """(1, 4+classes, n) tensor with the given (cx, cy, w, h, person_score) rows; rest ~0."""
+    out = np.zeros((1, 4 + classes, n), np.float32)
+    for i, (cx, cy, w, h, s) in enumerate(boxes):
+        out[0, :4, i] = (cx, cy, w, h)
+        out[0, 4, i] = s
+    return out
+
+
+def test_letterbox_geometry():
+    img, r, (px, py) = letterbox(np.zeros((480, 640, 3), np.uint8), 640)
+    assert img.shape == (640, 640, 3) and r == 1.0 and (px, py) == (0, 80)
+
+
+def test_decode_maps_back_to_frame_and_filters():
+    # person centred at (320, 320) in 640 letterbox space; 480x640 frame => pad_y=80
+    out = fake_yolo_output([(320, 320, 100, 200, 0.9), (50, 50, 20, 20, 0.1)])
+    boxes = decode_yolo_person(out, 0.4, 0.45, 1.0, (0, 80), (480, 640, 3))
+    assert boxes == [(270, 140, 100, 200)]
+
+
+def test_decode_nms_merges_duplicates_and_handles_empty():
+    out = fake_yolo_output([(320, 320, 100, 200, 0.9), (322, 322, 100, 200, 0.8)])
+    assert len(decode_yolo_person(out, 0.4, 0.45, 1.0, (0, 80), (480, 640, 3))) == 1
+    assert decode_yolo_person(fake_yolo_output([]), 0.4, 0.45, 1.0, (0, 0), (480, 640, 3)) == []
+
+
+def test_yolo_detector_end_to_end_with_stub_session():
+    class Stub:
+        def run(self, _, feed):
+            assert feed["images"].shape == (1, 3, 640, 640) and feed["images"].dtype == np.float32
+            return [fake_yolo_output([(320, 320, 100, 200, 0.9)])]
+    d = object.__new__(YoloPersonDetector)
+    d.conf, d.iou, d.zone, d.sess, d.input_name, d.size = 0.4, 0.45, Zone(), Stub(), "images", 640
+    assert d.detect(room()) == [(270, 140, 100, 200)]

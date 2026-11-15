@@ -123,3 +123,69 @@ class PersonDetector:
         rects = [list(map(int, rects[i])) for i in keep]
         idx = cv2.dnn.NMSBoxes(rects, [1.0] * len(rects), 0.0, 0.4) if rects else []
         return [tuple(int(v / s) for v in rects[i]) for i in np.ravel(idx)]
+
+
+def letterbox(frame: np.ndarray, size: int) -> tuple[np.ndarray, float, tuple[int, int]]:
+    """Resize keeping aspect ratio and pad to size x size. Returns (image, ratio, (pad_x, pad_y))."""
+    h, w = frame.shape[:2]
+    r = size / max(h, w)
+    nw, nh = int(round(w * r)), int(round(h * r))
+    resized = cv2.resize(frame, (nw, nh)) if (nw, nh) != (w, h) else frame
+    px, py = (size - nw) // 2, (size - nh) // 2
+    out = np.full((size, size, 3), 114, np.uint8)
+    out[py:py + nh, px:px + nw] = resized
+    return out, r, (px, py)
+
+
+def decode_yolo_person(out: np.ndarray, conf: float, iou: float, ratio: float,
+                       pad: tuple[int, int], frame_shape: tuple[int, ...]) -> list[Box]:
+    """Decode YOLOv8/YOLO11 ONNX output (1, 4+classes, N) into person boxes (COCO class 0).
+
+    Pure function so it can be tested without a model file.
+    """
+    pred = np.squeeze(out, 0)
+    if pred.shape[0] < pred.shape[1]:          # (features, N) -> (N, features)
+        pred = pred.T
+    scores = pred[:, 4]                         # class 0 = person
+    keep = scores >= conf
+    if not keep.any():
+        return []
+    pred, scores = pred[keep], scores[keep]
+    h, w = frame_shape[:2]
+    px, py = pad
+    cx, cy, bw, bh = pred[:, 0], pred[:, 1], pred[:, 2], pred[:, 3]
+    x1 = np.clip((cx - bw / 2 - px) / ratio, 0, w - 1)
+    y1 = np.clip((cy - bh / 2 - py) / ratio, 0, h - 1)
+    x2 = np.clip((cx + bw / 2 - px) / ratio, 0, w - 1)
+    y2 = np.clip((cy + bh / 2 - py) / ratio, 0, h - 1)
+    rects = [[int(a), int(b), int(c - a), int(d - b)] for a, b, c, d in zip(x1, y1, x2, y2)]
+    idx = cv2.dnn.NMSBoxes(rects, scores.astype(float).tolist(), conf, iou)
+    return [tuple(rects[i]) for i in np.ravel(idx) if rects[i][2] > 0 and rects[i][3] > 0]
+
+
+class YoloPersonDetector:
+    """Person detector using a YOLOv8 / YOLO11 model exported to ONNX (COCO classes; 'person' = 0).
+
+    Handles seated, partly hidden and angled people far better than HOG. Needs
+    `pip install onnxruntime` and a model file, e.g. exported with
+    `yolo export model=yolov8n.pt format=onnx` (check the model's licence before redistributing).
+    """
+
+    def __init__(self, model_path: str, conf: float = 0.4, iou: float = 0.45,
+                 zone: Zone | None = None):
+        import onnxruntime as ort  # lazy: only needed when YOLO is used
+        self.conf, self.iou = conf, iou
+        self.zone = zone or Zone()
+        self.sess = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+        inp = self.sess.get_inputs()[0]
+        self.input_name = inp.name
+        self.size = inp.shape[2] if isinstance(inp.shape[2], int) else 640
+
+    def detect(self, frame: np.ndarray) -> list[Box]:
+        m = self.zone.mask(frame.shape[:2])
+        if m is not None:
+            frame = cv2.bitwise_and(frame, frame, mask=m)
+        img, ratio, pad = letterbox(frame, self.size)
+        blob = np.ascontiguousarray(img[:, :, ::-1].transpose(2, 0, 1)[None], dtype=np.float32) / 255.0
+        out = self.sess.run(None, {self.input_name: blob})[0]
+        return decode_yolo_person(out, self.conf, self.iou, ratio, pad, frame.shape)
